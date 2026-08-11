@@ -1,4 +1,4 @@
-const CACHE_NAME = 'process-memo-v6';
+const CACHE_NAME = 'process-memo-v7';
 const ASSETS = [
   './',
   './index.html',

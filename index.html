@@ -27,10 +27,16 @@
     * { box-sizing:border-box; }
     html, body {
       margin:0;
+      width:100%;
       min-height:100%;
       background:#fff;
       color:#101729;
       overscroll-behavior-y:none;
+    }
+
+    body.detail-open {
+      height:var(--app-height, 100dvh);
+      overflow:hidden;
     }
     body {
       font-family:-apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
@@ -129,8 +135,7 @@
     /* ---------- 상세/수정 ---------- */
     #detailView {
       display:none;
-      height:100vh;
-      height:100dvh;
+      height:var(--app-height, 100dvh);
       overflow:hidden;
       background:#fff;
     }
@@ -147,6 +152,8 @@
       padding:10px 14px;
       box-shadow:0 2px 7px rgba(0,0,0,.12);
       z-index:10;
+      position:relative;
+      flex-shrink:0;
     }
 
     .plant-head {
@@ -202,7 +209,7 @@
     .top-btn[disabled] { opacity:.55; }
 
     .detail-body {
-      height:calc(100dvh - 108px);
+      height:calc(var(--app-height, 100dvh) - 108px);
       padding:6px 12px 8px;
       max-width:760px;
       width:100%;
@@ -237,6 +244,7 @@
       overflow-y:auto;
       overscroll-behavior:contain;
       -webkit-overflow-scrolling:touch;
+      touch-action:pan-y;
       padding:16px 16px 22px;
       white-space:pre-wrap;
       overflow-wrap:anywhere;
@@ -254,6 +262,7 @@
       overflow-y:auto;
       overscroll-behavior:contain;
       -webkit-overflow-scrolling:touch;
+      touch-action:pan-y;
       border:0;
       outline:0;
       resize:none;
@@ -418,7 +427,7 @@
       }
 
       .detail-body {
-        height:calc(100dvh - 108px) !important;
+        height:calc(var(--app-height, 100dvh) - 108px) !important;
         padding:6px 10px 8px !important;
       }
 
@@ -559,7 +568,7 @@ let loadingFrame = 0;
 let confirmAction = null;
 const frames = ['불러오는 중', '불러오는 중.', '불러오는 중..', '불러오는 중...'];
 
-function jsonp(params, timeoutMs=12000) {
+function jsonp(params, timeoutMs=30000) {
   return new Promise((resolve, reject) => {
     if (!PROXY_URL || PROXY_URL.indexOf('여기에_') === 0) {
       reject(new Error('Apps Script 웹앱 주소가 아직 입력되지 않았습니다.'));
@@ -675,6 +684,7 @@ function restoreLocalDraft() {
 
   homeView.style.display = 'none';
   detailView.classList.add('active');
+  document.body.classList.add('detail-open');
   detailTitle.textContent = selectedPlant + ' 처리장';
   headerPlantName.textContent = selectedPlant + '처리장';
 
@@ -697,6 +707,19 @@ function restoreLocalDraft() {
   return true;
 }
 
+
+
+function updateAppViewportHeight() {
+  // Android 키보드가 열리면 visualViewport.height가 줄어듭니다.
+  // 그 높이만 상세화면에 적용해서 상단 파란 영역은 고정하고
+  // 메모/입력 박스만 키보드 위까지 줄어들게 합니다.
+  const vv = window.visualViewport;
+  const h = vv ? vv.height : window.innerHeight;
+
+  if (h && Number.isFinite(h)) {
+    document.documentElement.style.setProperty('--app-height', `${Math.round(h)}px`);
+  }
+}
 
 function formatHeaderSavedTime(value) {
   const s = String(value || '').trim();
@@ -737,6 +760,7 @@ async function openPlant(plant) {
 
   homeView.style.display = 'none';
   detailView.classList.add('active');
+  document.body.classList.add('detail-open');
 
   detailTitle.textContent = plant + ' 처리장';
   setReadModeButtons();
@@ -772,6 +796,7 @@ function backHome() {
   headerPlantName.textContent = '처리장';
   headerSavedTime.textContent = '';
   detailView.classList.remove('active');
+  document.body.classList.remove('detail-open');
   homeView.style.display = 'block';
   window.scrollTo(0,0);
 }
@@ -933,7 +958,7 @@ async function savePlant() {
       plant:selectedPlant,
       token,
       count:String(chunks.length)
-    }, 20000);
+    }, 45000);
 
     if (!p.ok) throw new Error(p.error || '저장하지 못했습니다.');
 
@@ -965,7 +990,18 @@ document.querySelectorAll('.plant-btn').forEach(btn => {
   btn.addEventListener('click', () => openPlant(btn.dataset.plant));
 });
 
-editorEl.addEventListener('input', saveDraftLocally);
+editorEl.addEventListener('input', () => {
+  saveDraftLocally();
+
+  // 새 줄이 늘어날 때 textarea 내부에서만 스크롤되어
+  // 현재 입력 위치가 키보드 바로 위에 보이도록 합니다.
+  requestAnimationFrame(() => {
+    const end = editorEl.value.length;
+    if (editorEl.selectionStart === end && editorEl.selectionEnd === end) {
+      editorEl.scrollTop = editorEl.scrollHeight;
+    }
+  });
+});
 
 leftButton.addEventListener('click', () => {
   if (editMode) askUndo();
@@ -1024,13 +1060,30 @@ window.addEventListener('pagehide', () => {
 
 // 모바일 키보드가 열리거나 화면 높이가 변할 때도
 // 편집창의 현재 입력 위치가 보이도록 맨 아래 위치를 유지합니다.
+updateAppViewportHeight();
+
+window.addEventListener('resize', updateAppViewportHeight);
+window.addEventListener('orientationchange', () => {
+  setTimeout(updateAppViewportHeight, 100);
+});
+
 if (window.visualViewport) {
   window.visualViewport.addEventListener('resize', () => {
+    updateAppViewportHeight();
+
     if (editMode) {
       setTimeout(() => {
-        editorEl.scrollTop = editorEl.scrollHeight;
-      }, 50);
+        // 커서가 입력창 맨 아래에 있을 때 키보드 위에 계속 보이도록 유지
+        const end = editorEl.value.length;
+        if (editorEl.selectionStart === end && editorEl.selectionEnd === end) {
+          editorEl.scrollTop = editorEl.scrollHeight;
+        }
+      }, 60);
     }
+  });
+
+  window.visualViewport.addEventListener('scroll', () => {
+    updateAppViewportHeight();
   });
 }
 
@@ -1066,7 +1119,7 @@ restoreLocalDraft();
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js?v=3', { updateViaCache: 'none' }).catch(() => {});
+    navigator.serviceWorker.register('./sw.js?v=4', { updateViaCache: 'none' }).catch(() => {});
   });
 }
 </script>

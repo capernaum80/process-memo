@@ -967,6 +967,11 @@ function askUndo() {
 
 function doUndo() {
   editorEl.value = currentText;
+
+  // 사용자가 명시적으로 되돌리기를 선택한 경우,
+  // 강제종료/새로고침 복원용 임시 수정본도 함께 폐기합니다.
+  clearLocalDraft();
+
   editMode = false;
   releaseEditHistoryGuard();
   setReadModeButtons();

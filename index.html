@@ -1,0 +1,734 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#ffffff">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="메모장">
+  <meta name="format-detection" content="telephone=no">
+  <title>공정팀 메모장</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+
+  <style>
+    :root {
+      color-scheme: light;
+      --blue:#075acb;
+      --blue-dark:#03489f;
+      --navy:#061842;
+      --border:#d9e0e9;
+      --muted:#67748a;
+      --bg:#ffffff;
+    }
+
+    * { box-sizing:border-box; }
+    html, body { margin:0; min-height:100%; background:#fff; color:#101729; }
+    body {
+      font-family:-apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+      -webkit-text-size-adjust:100%;
+      padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    }
+
+    button, textarea { font:inherit; }
+
+    .app {
+      min-height:100vh;
+      background:#fff;
+    }
+
+    /* ---------- 메인 ---------- */
+    #homeView {
+      min-height:100vh;
+      padding:28px 18px 24px;
+    }
+
+    .home-title {
+      text-align:center;
+      margin:12px 0 24px;
+      font-size:31px;
+      font-weight:800;
+      color:var(--navy);
+      letter-spacing:.28em;
+      text-indent:.28em;
+    }
+
+    .plant-list {
+      display:flex;
+      flex-direction:column;
+      gap:9px;
+      max-width:620px;
+      margin:0 auto;
+    }
+
+    .plant-btn {
+      width:100%;
+      height:64px;
+      border:0;
+      border-radius:12px;
+      color:#fff;
+      display:grid;
+      grid-template-columns:44px 1fr auto 24px;
+      align-items:center;
+      gap:8px;
+      padding:0 15px;
+      box-shadow:0 4px 10px rgba(28,60,120,.12);
+      cursor:pointer;
+      text-align:left;
+      -webkit-tap-highlight-color:transparent;
+    }
+
+    .plant-btn:active { transform:translateY(1px); }
+
+    .plant-no {
+      width:38px;
+      height:38px;
+      border-radius:50%;
+      background:rgba(255,255,255,.96);
+      color:inherit;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:20px;
+      font-weight:800;
+    }
+
+    .plant-name { font-size:24px; font-weight:800; }
+    .capacity { font-size:17px; font-weight:650; white-space:nowrap; }
+    .chev { font-size:38px; line-height:1; font-weight:300; }
+
+    .p1 { background:linear-gradient(135deg,#4298ec,#2a86e1); }
+    .p2 { background:linear-gradient(135deg,#2cc5c4,#19aaa9); }
+    .p3 { background:linear-gradient(135deg,#a4d638,#86bd22); }
+    .p4 { background:linear-gradient(135deg,#ffc034,#ffad19); }
+    .p5 { background:linear-gradient(135deg,#ff9a35,#fa8121); }
+    .p6 { background:linear-gradient(135deg,#a282de,#8064ca); }
+    .p7 { background:linear-gradient(135deg,#f27b9c,#e96187); }
+    .p8 { background:linear-gradient(135deg,#658fee,#4778dd); }
+    .p9 { background:linear-gradient(135deg,#36bce0,#1ba5cd); }
+
+    /* 번호 원 안의 숫자는 각 카드 색과 맞추기 위한 별도 색 */
+    .p1 .plant-no { color:#318ce6; }
+    .p2 .plant-no { color:#20b7b5; }
+    .p3 .plant-no { color:#8bc529; }
+    .p4 .plant-no { color:#f7b01e; }
+    .p5 .plant-no { color:#f68b26; }
+    .p6 .plant-no { color:#866acc; }
+    .p7 .plant-no { color:#e96d91; }
+    .p8 .plant-no { color:#527fdf; }
+    .p9 .plant-no { color:#23acd2; }
+
+    /* ---------- 상세/수정 ---------- */
+    #detailView {
+      display:none;
+      min-height:100vh;
+      background:#fff;
+    }
+
+    .topbar {
+      height:74px;
+      background:linear-gradient(#0b64d6,#0759c6);
+      color:#fff;
+      display:grid;
+      grid-template-columns:1fr auto auto;
+      align-items:center;
+      gap:12px;
+      padding:0 18px;
+      box-shadow:0 2px 7px rgba(0,0,0,.12);
+      position:sticky;
+      top:0;
+      z-index:10;
+    }
+
+    .team-name {
+      font-size:21px;
+      font-weight:800;
+      white-space:nowrap;
+    }
+
+    .top-btn {
+      height:43px;
+      min-width:118px;
+      padding:0 13px;
+      border:1px solid rgba(255,255,255,.95);
+      border-radius:8px;
+      background:rgba(255,255,255,.03);
+      color:#fff;
+      font-size:17px;
+      font-weight:750;
+      cursor:pointer;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap:7px;
+      -webkit-tap-highlight-color:transparent;
+    }
+
+    .top-btn:active { background:rgba(255,255,255,.12); }
+    .top-btn[disabled] { opacity:.55; }
+
+    .detail-body {
+      padding:24px 18px 18px;
+      max-width:760px;
+      margin:0 auto;
+    }
+
+    .detail-title {
+      text-align:center;
+      color:var(--navy);
+      font-size:30px;
+      font-weight:850;
+      margin:4px 0 20px;
+    }
+
+    #status {
+      min-height:30px;
+      padding:3px 2px 8px;
+      color:#55637a;
+      font-size:13px;
+    }
+
+    .content-box {
+      min-height:calc(100vh - 200px);
+      border:1px solid #cfd8e5;
+      border-radius:9px;
+      background:#fff;
+      overflow:hidden;
+      position:relative;
+    }
+
+    #notice {
+      display:none;
+      min-height:calc(100vh - 202px);
+      padding:18px 16px;
+      white-space:pre-wrap;
+      overflow-wrap:anywhere;
+      font-size:18px;
+      line-height:1.42;
+      user-select:text;
+      -webkit-user-select:text;
+    }
+
+    #editor {
+      display:none;
+      width:100%;
+      min-height:calc(100vh - 202px);
+      border:0;
+      outline:0;
+      resize:none;
+      padding:18px 16px;
+      background:#fff;
+      color:#101729;
+      font-size:18px;
+      line-height:1.42;
+      white-space:pre-wrap;
+    }
+
+    .bottom-note {
+      padding:12px 3px 4px;
+      color:#627087;
+      font-size:13px;
+      display:flex;
+      align-items:center;
+      gap:7px;
+    }
+
+    #error {
+      display:none;
+      padding:20px 16px;
+      color:#b00020;
+      font-size:16px;
+    }
+
+    /* ---------- 확인 팝업 ---------- */
+    .modal-backdrop {
+      display:none;
+      position:fixed;
+      inset:0;
+      z-index:1000;
+      align-items:center;
+      justify-content:center;
+      background:rgba(0,0,0,.33);
+      padding:24px;
+    }
+    .modal-backdrop.show { display:flex; }
+
+    .modal {
+      width:min(350px,100%);
+      background:#fff;
+      border-radius:14px;
+      padding:24px 20px 18px;
+      box-shadow:0 14px 38px rgba(0,0,0,.25);
+      text-align:center;
+    }
+
+    .modal-title {
+      font-size:21px;
+      font-weight:850;
+      color:#111827;
+      margin-bottom:10px;
+    }
+
+    .modal-message {
+      font-size:15px;
+      line-height:1.55;
+      color:#4b5563;
+      margin-bottom:19px;
+      white-space:pre-line;
+    }
+
+    .modal-actions { display:flex; gap:10px; }
+
+    .modal-btn {
+      flex:1;
+      height:44px;
+      border-radius:8px;
+      border:1px solid #c7d0dc;
+      background:#fff;
+      color:#182234;
+      font-size:16px;
+      font-weight:800;
+      cursor:pointer;
+    }
+
+    .modal-btn.primary {
+      background:#075acb;
+      border-color:#075acb;
+      color:#fff;
+    }
+
+    @media (max-width:430px) {
+      #homeView { padding:22px 14px 20px; }
+      .home-title { font-size:29px; margin-bottom:20px; }
+      .plant-btn {
+        height:58px;
+        grid-template-columns:39px 1fr auto 19px;
+        padding:0 11px;
+        gap:6px;
+      }
+      .plant-no { width:34px; height:34px; font-size:18px; }
+      .plant-name { font-size:22px; }
+      .capacity { font-size:16px; }
+      .topbar {
+        height:68px;
+        padding:0 12px;
+        gap:8px;
+        grid-template-columns:1fr auto auto;
+      }
+      .team-name { font-size:18px; }
+      .top-btn { min-width:104px; height:40px; padding:0 10px; font-size:16px; }
+      .detail-title { font-size:28px; }
+    }
+
+    @media (max-width:370px) {
+      .plant-name { font-size:20px; }
+      .capacity { font-size:14px; }
+      .top-btn { min-width:94px; font-size:14px; }
+      .team-name { font-size:16px; }
+    }
+  </style>
+</head>
+
+<body>
+<div class="app">
+
+  <section id="homeView">
+    <div class="home-title">메모장</div>
+
+    <div class="plant-list">
+      <button class="plant-btn p1" data-plant="구룡"><span class="plant-no">1</span><span class="plant-name">구룡</span><span class="capacity">(220㎥/일)</span><span class="chev">›</span></button>
+      <button class="plant-btn p2" data-plant="임천"><span class="plant-no">2</span><span class="plant-name">임천</span><span class="capacity">(200㎥/일)</span><span class="chev">›</span></button>
+      <button class="plant-btn p3" data-plant="장암"><span class="plant-no">3</span><span class="plant-name">장암</span><span class="capacity">(270㎥/일)</span><span class="chev">›</span></button>
+      <button class="plant-btn p4" data-plant="은산"><span class="plant-no">4</span><span class="plant-name">은산</span><span class="capacity">(350㎥/일)</span><span class="chev">›</span></button>
+      <button class="plant-btn p5" data-plant="남면"><span class="plant-no">5</span><span class="plant-name">남면</span><span class="capacity">(170㎥/일)</span><span class="chev">›</span></button>
+      <button class="plant-btn p6" data-plant="서운"><span class="plant-no">6</span><span class="plant-name">서운</span><span class="capacity">(136㎥/일)</span><span class="chev">›</span></button>
+      <button class="plant-btn p7" data-plant="반교"><span class="plant-no">7</span><span class="plant-name">반교</span><span class="capacity">(68㎥/일)</span><span class="chev">›</span></button>
+      <button class="plant-btn p8" data-plant="외산"><span class="plant-no">8</span><span class="plant-name">외산</span><span class="capacity">(400㎥/일)</span><span class="chev">›</span></button>
+      <button class="plant-btn p9" data-plant="장항"><span class="plant-no">9</span><span class="plant-name">장항</span><span class="capacity">(68㎥/일)</span><span class="chev">›</span></button>
+    </div>
+  </section>
+
+  <section id="detailView">
+    <div class="topbar">
+      <div class="team-name">공정팀</div>
+      <button id="leftButton" class="top-btn" type="button"><span id="leftIcon">←</span><span id="leftLabel">이전화면</span></button>
+      <button id="rightButton" class="top-btn" type="button"><span id="rightIcon">✎</span><span id="rightLabel">수정</span></button>
+    </div>
+
+    <div class="detail-body">
+      <div id="detailTitle" class="detail-title"></div>
+      <div id="status"></div>
+
+      <div class="content-box">
+        <div id="notice"></div>
+        <textarea id="editor" spellcheck="false" aria-label="처리장 메모 수정"></textarea>
+        <div id="error"></div>
+      </div>
+
+      <div class="bottom-note"><span>ⓘ</span><span id="bottomText">최신 메모가 하단에 표시됩니다.</span></div>
+    </div>
+  </section>
+
+</div>
+
+<div id="confirmModal" class="modal-backdrop" role="dialog" aria-modal="true">
+  <div class="modal">
+    <div id="modalTitle" class="modal-title"></div>
+    <div id="modalMessage" class="modal-message"></div>
+    <div class="modal-actions">
+      <button id="modalNo" class="modal-btn" type="button">아니오</button>
+      <button id="modalYes" class="modal-btn primary" type="button">예</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/*
+  ★ Apps Script 배포 후 아래 PROXY_URL을 새 웹앱 URL로 교체하세요.
+  예:
+  const PROXY_URL = "https://script.google.com/macros/s/....../exec";
+*/
+const PROXY_URL = "여기에_APPS_SCRIPT_웹앱_URL을_넣으세요";
+
+const homeView = document.getElementById('homeView');
+const detailView = document.getElementById('detailView');
+const detailTitle = document.getElementById('detailTitle');
+const statusEl = document.getElementById('status');
+const noticeEl = document.getElementById('notice');
+const editorEl = document.getElementById('editor');
+const errorEl = document.getElementById('error');
+const leftButton = document.getElementById('leftButton');
+const rightButton = document.getElementById('rightButton');
+const leftIcon = document.getElementById('leftIcon');
+const leftLabel = document.getElementById('leftLabel');
+const rightIcon = document.getElementById('rightIcon');
+const rightLabel = document.getElementById('rightLabel');
+const bottomText = document.getElementById('bottomText');
+
+const confirmModal = document.getElementById('confirmModal');
+const modalTitle = document.getElementById('modalTitle');
+const modalMessage = document.getElementById('modalMessage');
+const modalNo = document.getElementById('modalNo');
+const modalYes = document.getElementById('modalYes');
+
+let selectedPlant = '';
+let currentText = '';
+let editMode = false;
+let loadingTimer = null;
+let loadingFrame = 0;
+let confirmAction = null;
+const frames = ['불러오는 중', '불러오는 중.', '불러오는 중..', '불러오는 중...'];
+
+function jsonp(params, timeoutMs=12000) {
+  return new Promise((resolve, reject) => {
+    if (!PROXY_URL || PROXY_URL.indexOf('여기에_') === 0) {
+      reject(new Error('Apps Script 웹앱 주소가 아직 입력되지 않았습니다.'));
+      return;
+    }
+
+    const callbackName = '__processmemo_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+    const script = document.createElement('script');
+
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error('응답 시간이 초과되었습니다.'));
+    }, timeoutMs);
+
+    function cleanup() {
+      clearTimeout(timeout);
+      try { delete window[callbackName]; } catch (_) {}
+      script.remove();
+    }
+
+    window[callbackName] = payload => {
+      cleanup();
+      resolve(payload || {});
+    };
+
+    script.onerror = () => {
+      cleanup();
+      reject(new Error('서버에 연결하지 못했습니다.'));
+    };
+
+    const query = new URLSearchParams({
+      ...params,
+      callback: callbackName,
+      t: Date.now().toString()
+    });
+
+    script.src = PROXY_URL + '?' + query.toString();
+    document.head.appendChild(script);
+  });
+}
+
+function startLoading() {
+  stopLoading();
+  loadingFrame = 0;
+  statusEl.textContent = frames[0];
+
+  loadingTimer = setInterval(() => {
+    statusEl.textContent = frames[loadingFrame++ % frames.length];
+  }, 180);
+}
+
+function stopLoading() {
+  if (loadingTimer) clearInterval(loadingTimer);
+  loadingTimer = null;
+}
+
+function showError(message) {
+  stopLoading();
+  statusEl.textContent = '';
+  noticeEl.style.display = 'none';
+  editorEl.style.display = 'none';
+  errorEl.style.display = 'block';
+  errorEl.textContent = message;
+}
+
+function formatNow(prefix) {
+  const d = new Date();
+  const mm = String(d.getMonth()+1).padStart(2,'0');
+  const dd = String(d.getDate()).padStart(2,'0');
+  const hh = String(d.getHours()).padStart(2,'0');
+  const mi = String(d.getMinutes()).padStart(2,'0');
+  return `${prefix}: ${mm}/${dd} ${hh}:${mi}`;
+}
+
+function scrollToBottomSoon() {
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      window.scrollTo(0, document.documentElement.scrollHeight);
+      noticeEl.scrollTop = noticeEl.scrollHeight;
+    });
+  });
+}
+
+async function openPlant(plant) {
+  selectedPlant = plant;
+  currentText = '';
+  editMode = false;
+
+  homeView.style.display = 'none';
+  detailView.style.display = 'block';
+
+  detailTitle.textContent = plant + ' 처리장';
+  setReadModeButtons();
+  errorEl.style.display = 'none';
+  noticeEl.style.display = 'none';
+  editorEl.style.display = 'none';
+  bottomText.textContent = '최신 메모가 하단에 표시됩니다.';
+  startLoading();
+
+  try {
+    const payload = await jsonp({ action:'read', plant });
+    if (!payload.ok) throw new Error(payload.error || '내용을 불러오지 못했습니다.');
+
+    stopLoading();
+    currentText = payload.text || '';
+    statusEl.textContent = payload.updated ? '최종 저장: ' + payload.updated : formatNow('최종 확인');
+
+    noticeEl.textContent = currentText.trim() ? currentText : '메모가 비어 있습니다.';
+    noticeEl.style.display = 'block';
+    editorEl.style.display = 'none';
+    errorEl.style.display = 'none';
+
+    scrollToBottomSoon();
+  } catch (err) {
+    showError(err && err.message ? err.message : '내용을 불러오지 못했습니다.');
+  }
+}
+
+function backHome() {
+  if (editMode) return;
+  selectedPlant = '';
+  currentText = '';
+  detailView.style.display = 'none';
+  homeView.style.display = 'block';
+  window.scrollTo(0,0);
+}
+
+function setReadModeButtons() {
+  leftIcon.textContent = '←';
+  leftLabel.textContent = '이전화면';
+  rightIcon.textContent = '✎';
+  rightLabel.textContent = '수정';
+  leftButton.disabled = false;
+  rightButton.disabled = false;
+}
+
+function setEditModeButtons() {
+  leftIcon.textContent = '←';
+  leftLabel.textContent = '되돌리기';
+  rightIcon.textContent = '✎';
+  rightLabel.textContent = '저장';
+}
+
+function enterEditMode() {
+  if (!selectedPlant || editMode) return;
+
+  editMode = true;
+  setEditModeButtons();
+  noticeEl.style.display = 'none';
+  errorEl.style.display = 'none';
+
+  editorEl.value = currentText;
+  editorEl.style.display = 'block';
+
+  statusEl.textContent = '수정 중';
+  bottomText.textContent = '수정 모드에서는 내용을 바로 편집할 수 있습니다.';
+
+  setTimeout(() => {
+    editorEl.focus();
+    editorEl.setSelectionRange(editorEl.value.length, editorEl.value.length);
+    editorEl.scrollTop = editorEl.scrollHeight;
+    window.scrollTo(0, document.documentElement.scrollHeight);
+  }, 50);
+}
+
+function askConfirm(title, message, action) {
+  modalTitle.textContent = title;
+  modalMessage.textContent = message;
+  confirmAction = action;
+  confirmModal.classList.add('show');
+}
+
+function closeConfirm() {
+  confirmModal.classList.remove('show');
+  confirmAction = null;
+}
+
+function askUndo() {
+  if (!editMode) return;
+
+  askConfirm(
+    '원래 내용으로 되돌리시겠습니까?',
+    '수정한 내용이 취소됩니다.\n원래 저장된 내용으로 되돌립니다.',
+    'undo'
+  );
+}
+
+function doUndo() {
+  editorEl.value = currentText;
+  editMode = false;
+  setReadModeButtons();
+
+  editorEl.style.display = 'none';
+  noticeEl.textContent = currentText.trim() ? currentText : '메모가 비어 있습니다.';
+  noticeEl.style.display = 'block';
+
+  statusEl.textContent = formatNow('수정 취소');
+  bottomText.textContent = '최신 메모가 하단에 표시됩니다.';
+  scrollToBottomSoon();
+}
+
+function askSave() {
+  if (!editMode) return;
+
+  askConfirm(
+    '정말 저장하시겠습니까?',
+    '수정한 내용을 Google Drive에 저장합니다.',
+    'save'
+  );
+}
+
+async function savePlant() {
+  if (!editMode || !selectedPlant) return;
+
+  const text = editorEl.value;
+  leftButton.disabled = true;
+  rightButton.disabled = true;
+  rightLabel.textContent = '저장중';
+  statusEl.textContent = '저장중...';
+
+  const token = Date.now().toString(36) + Math.random().toString(36).slice(2,10);
+  const CHUNK_SIZE = 600;
+  const chunks = [];
+
+  for (let i=0; i<text.length; i+=CHUNK_SIZE) {
+    chunks.push(text.slice(i, i+CHUNK_SIZE));
+  }
+  if (!chunks.length) chunks.push('');
+
+  try {
+    let p = await jsonp({ action:'saveStart', plant:selectedPlant, token });
+    if (!p.ok) throw new Error(p.error || '저장을 시작하지 못했습니다.');
+
+    for (let i=0; i<chunks.length; i++) {
+      p = await jsonp({
+        action:'saveChunk',
+        plant:selectedPlant,
+        token,
+        index:String(i),
+        data:chunks[i]
+      });
+      if (!p.ok) throw new Error(p.error || '저장 중 오류가 발생했습니다.');
+    }
+
+    p = await jsonp({
+      action:'saveFinish',
+      plant:selectedPlant,
+      token,
+      count:String(chunks.length)
+    }, 20000);
+
+    if (!p.ok) throw new Error(p.error || '저장하지 못했습니다.');
+
+    currentText = text;
+    editMode = false;
+    setReadModeButtons();
+
+    editorEl.style.display = 'none';
+    noticeEl.textContent = currentText.trim() ? currentText : '메모가 비어 있습니다.';
+    noticeEl.style.display = 'block';
+
+    statusEl.textContent = p.updated ? '저장 완료: ' + p.updated : formatNow('저장 완료');
+    bottomText.textContent = '최신 메모가 하단에 표시됩니다.';
+    scrollToBottomSoon();
+
+  } catch (err) {
+    statusEl.textContent = '저장 실패';
+    alert('저장하지 못했습니다.\n' + (err && err.message ? err.message : '잠시 후 다시 시도해주세요.'));
+    setEditModeButtons();
+  } finally {
+    leftButton.disabled = false;
+    rightButton.disabled = false;
+  }
+}
+
+document.querySelectorAll('.plant-btn').forEach(btn => {
+  btn.addEventListener('click', () => openPlant(btn.dataset.plant));
+});
+
+leftButton.addEventListener('click', () => {
+  if (editMode) askUndo();
+  else backHome();
+});
+
+rightButton.addEventListener('click', () => {
+  if (editMode) askSave();
+  else enterEditMode();
+});
+
+modalNo.addEventListener('click', closeConfirm);
+modalYes.addEventListener('click', () => {
+  const action = confirmAction;
+  closeConfirm();
+
+  if (action === 'undo') doUndo();
+  if (action === 'save') savePlant();
+});
+
+confirmModal.addEventListener('click', e => {
+  if (e.target === confirmModal) closeConfirm();
+});
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+  });
+}
+</script>
+</body>
+</html>

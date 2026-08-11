@@ -35,8 +35,12 @@
     }
 
     body.detail-open {
-      height:var(--app-height, 100dvh);
+      position:fixed;
+      inset:0;
+      width:100%;
+      height:100%;
       overflow:hidden;
+      overscroll-behavior:none;
     }
     body {
       font-family:-apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
@@ -135,9 +139,15 @@
     /* ---------- 상세/수정 ---------- */
     #detailView {
       display:none;
+      position:fixed;
+      left:0;
+      right:0;
+      top:var(--vv-top, 0px);
+      width:100%;
       height:var(--app-height, 100dvh);
       overflow:hidden;
       background:#fff;
+      z-index:500;
     }
 
     .topbar {
@@ -153,6 +163,7 @@
       box-shadow:0 2px 7px rgba(0,0,0,.12);
       z-index:10;
       position:relative;
+      flex:0 0 108px;
       flex-shrink:0;
     }
 
@@ -468,6 +479,13 @@
       }
     }
 
+  
+    .top-btn:disabled {
+      opacity:.55;
+      cursor:default;
+      pointer-events:none;
+    }
+
   </style>
 </head>
 
@@ -561,6 +579,7 @@ const modalYes = document.getElementById('modalYes');
 let selectedPlant = '';
 let currentText = '';
 let editMode = false;
+let loadingPlant = false;
 let loadingTimer = null;
 
 const DRAFT_STORAGE_KEY = 'processMemoDraftV1';
@@ -568,7 +587,7 @@ let loadingFrame = 0;
 let confirmAction = null;
 const frames = ['불러오는 중', '불러오는 중.', '불러오는 중..', '불러오는 중...'];
 
-function jsonp(params, timeoutMs=12000) {
+function jsonp(params, timeoutMs=30000) {
   return new Promise((resolve, reject) => {
     if (!PROXY_URL || PROXY_URL.indexOf('여기에_') === 0) {
       reject(new Error('Apps Script 웹앱 주소가 아직 입력되지 않았습니다.'));
@@ -687,6 +706,8 @@ function restoreLocalDraft() {
   document.body.classList.add('detail-open');
   detailTitle.textContent = selectedPlant + ' 처리장';
   headerPlantName.textContent = selectedPlant + '처리장';
+  loadingPlant = false;
+  rightButton.disabled = false;
 
   setEditModeButtons();
 
@@ -710,14 +731,21 @@ function restoreLocalDraft() {
 
 
 function updateAppViewportHeight() {
-  // Android 키보드가 열리면 visualViewport.height가 줄어듭니다.
-  // 그 높이만 상세화면에 적용해서 상단 파란 영역은 고정하고
-  // 메모/입력 박스만 키보드 위까지 줄어들게 합니다.
+  // Android Chrome은 키보드 입력 중 커서를 보이게 하려고
+  // visual viewport 자체를 위아래로 이동(offsetTop)시킬 수 있습니다.
+  // 높이뿐 아니라 그 이동량까지 상세화면의 top에 그대로 반영하면
+  // 파란 상단 영역이 현재 보이는 화면의 맨 위에 계속 고정됩니다.
   const vv = window.visualViewport;
+
   const h = vv ? vv.height : window.innerHeight;
+  const top = vv ? vv.offsetTop : 0;
 
   if (h && Number.isFinite(h)) {
     document.documentElement.style.setProperty('--app-height', `${Math.round(h)}px`);
+  }
+
+  if (Number.isFinite(top)) {
+    document.documentElement.style.setProperty('--vv-top', `${Math.round(top)}px`);
   }
 }
 
@@ -754,9 +782,14 @@ async function openPlant(plant) {
   selectedPlant = plant;
   currentText = '';
   editMode = false;
+  loadingPlant = true;
 
   headerPlantName.textContent = plant + '처리장';
   headerSavedTime.textContent = '';
+
+  rightIcon.textContent = '';
+  rightLabel.textContent = '로딩중';
+  rightButton.disabled = true;
 
   homeView.style.display = 'none';
   detailView.classList.add('active');
@@ -778,6 +811,11 @@ async function openPlant(plant) {
     statusEl.textContent = payload.updated ? '최종 저장: ' + payload.updated : formatNow('최종 확인');
     headerSavedTime.textContent = payload.updated ? formatHeaderSavedTime(payload.updated) : '';
 
+    loadingPlant = false;
+    rightIcon.textContent = '✎';
+    rightLabel.textContent = '수정';
+    rightButton.disabled = false;
+
     noticeEl.textContent = currentText.trim() ? currentText : '메모가 비어 있습니다.';
     noticeEl.style.display = 'block';
     editorEl.style.display = 'none';
@@ -785,6 +823,11 @@ async function openPlant(plant) {
 
     scrollToBottomSoon();
   } catch (err) {
+    loadingPlant = false;
+    rightIcon.textContent = '';
+    rightLabel.textContent = '로딩중';
+    rightButton.disabled = true;
+
     showError(err && err.message ? err.message : '내용을 불러오지 못했습니다.');
   }
 }
@@ -793,12 +836,13 @@ function backHome() {
   if (editMode) return;
   selectedPlant = '';
   currentText = '';
+  loadingPlant = false;
   headerPlantName.textContent = '처리장';
   headerSavedTime.textContent = '';
+  rightButton.disabled = false;
   detailView.classList.remove('active');
   document.body.classList.remove('detail-open');
   homeView.style.display = 'block';
-  window.scrollTo(0,0);
 }
 
 function setReadModeButtons() {
@@ -958,7 +1002,7 @@ async function savePlant() {
       plant:selectedPlant,
       token,
       count:String(chunks.length)
-    }, 20000);
+    }, 45000);
 
     if (!p.ok) throw new Error(p.error || '저장하지 못했습니다.');
 
@@ -1003,12 +1047,28 @@ editorEl.addEventListener('input', () => {
   });
 });
 
+editorEl.addEventListener('focus', () => {
+  updateAppViewportHeight();
+
+  // 키보드가 완전히 올라온 뒤 한 번 더 보정
+  setTimeout(() => {
+    updateAppViewportHeight();
+    editorEl.scrollTop = editorEl.scrollHeight;
+  }, 250);
+});
+
+document.addEventListener('selectionchange', () => {
+  if (!editMode || document.activeElement !== editorEl) return;
+  updateAppViewportHeight();
+});
+
 leftButton.addEventListener('click', () => {
   if (editMode) askUndo();
   else backHome();
 });
 
 rightButton.addEventListener('click', () => {
+  if (loadingPlant || rightButton.disabled) return;
   if (editMode) askSave();
   else enterEditMode();
 });
@@ -1068,23 +1128,23 @@ window.addEventListener('orientationchange', () => {
 });
 
 if (window.visualViewport) {
-  window.visualViewport.addEventListener('resize', () => {
+  const keepEditorCaretVisible = () => {
     updateAppViewportHeight();
 
-    if (editMode) {
-      setTimeout(() => {
-        // 커서가 입력창 맨 아래에 있을 때 키보드 위에 계속 보이도록 유지
-        const end = editorEl.value.length;
-        if (editorEl.selectionStart === end && editorEl.selectionEnd === end) {
-          editorEl.scrollTop = editorEl.scrollHeight;
-        }
-      }, 60);
-    }
-  });
+    if (!editMode) return;
 
-  window.visualViewport.addEventListener('scroll', () => {
-    updateAppViewportHeight();
-  });
+    requestAnimationFrame(() => {
+      const end = editorEl.value.length;
+
+      // 입력 커서가 맨 끝에 있을 때는 textarea 자체만 아래로 이동
+      if (editorEl.selectionStart === end && editorEl.selectionEnd === end) {
+        editorEl.scrollTop = editorEl.scrollHeight;
+      }
+    });
+  };
+
+  window.visualViewport.addEventListener('resize', keepEditorCaretVisible);
+  window.visualViewport.addEventListener('scroll', keepEditorCaretVisible);
 }
 
 // Android Chrome / 설치형 웹앱에서 화면 최상단을 아래로 당겨
@@ -1119,7 +1179,7 @@ restoreLocalDraft();
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js?v=4', { updateViaCache: 'none' }).catch(() => {});
+    navigator.serviceWorker.register('./sw.js?v=6', { updateViaCache: 'none' }).catch(() => {});
   });
 }
 </script>

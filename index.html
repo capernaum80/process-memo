@@ -610,6 +610,7 @@ let loadingTimer = null;
 const DRAFT_STORAGE_KEY = 'processMemoDraftV1';
 let loadingFrame = 0;
 let confirmAction = null;
+let suppressNextDetailPop = false;
 const frames = ['불러오는 중', '불러오는 중.', '불러오는 중..', '불러오는 중...'];
 
 function jsonp(params, timeoutMs=30000) {
@@ -723,7 +724,10 @@ function restoreLocalDraft() {
   editMode = true;
 
   try {
-    history.pushState({ processMemoEdit: true }, '', location.href);
+    // 복원된 수정화면 아래에 처리장 상세 상태를 한 단계 둡니다.
+    // 수정 보호용 상태가 정리된 뒤에도 상세 읽기 화면에 그대로 머물 수 있게 합니다.
+    history.pushState({ processMemoDetail: true, plant: selectedPlant }, '', location.href);
+    history.pushState({ processMemoEdit: true, plant: selectedPlant }, '', location.href);
   } catch (_) {}
 
   homeView.style.display = 'none';
@@ -809,6 +813,12 @@ async function openPlant(plant) {
   editMode = false;
   loadingPlant = true;
 
+  // 처리장 읽기 화면을 브라우저 히스토리 한 단계로 등록합니다.
+  // Android 시스템 뒤로가기를 누르면 이 단계가 빠지면서 메인화면으로 돌아갑니다.
+  try {
+    history.pushState({ processMemoDetail: true, plant }, '', location.href);
+  } catch (_) {}
+
   headerPlantName.textContent = plant + '처리장';
   headerSavedTime.textContent = '';
 
@@ -857,8 +867,7 @@ async function openPlant(plant) {
   }
 }
 
-function backHome() {
-  if (editMode) return;
+function showHomeView() {
   selectedPlant = '';
   currentText = '';
   loadingPlant = false;
@@ -868,6 +877,20 @@ function backHome() {
   detailView.classList.remove('active');
   document.body.classList.remove('detail-open');
   homeView.style.display = 'block';
+}
+
+function backHome() {
+  if (editMode) return;
+
+  // 상세 읽기 화면이 히스토리에 등록되어 있으면 실제 뒤로가기를 사용합니다.
+  // 그러면 상세 → 메인 → 앱 종료 순서가 Android 시스템 뒤로가기와 동일해집니다.
+  if (history.state && history.state.processMemoDetail) {
+    history.back();
+    return;
+  }
+
+  // 예외적으로 히스토리 상태가 없는 경우에도 화면 자체는 메인으로 복귀시킵니다.
+  showHomeView();
 }
 
 function setReadModeButtons() {
@@ -935,12 +958,16 @@ function enterEditMode() {
 
 
 function releaseEditHistoryGuard() {
-  // pushState로 추가한 보호 히스토리 1단계를 정상 종료 시 정리합니다.
+  // pushState로 추가한 수정 보호 히스토리 1단계를 정상 종료 시 정리합니다.
+  // 이 history.back()은 사용자가 누른 뒤로가기가 아니므로 상세→메인 이동은 막습니다.
   try {
     if (history.state && history.state.processMemoEdit) {
+      suppressNextDetailPop = true;
       history.back();
     }
-  } catch (_) {}
+  } catch (_) {
+    suppressNextDetailPop = false;
+  }
 }
 
 function askConfirm(title, message, action) {
@@ -1143,23 +1170,37 @@ confirmModal.addEventListener('click', e => {
   if (e.target === confirmModal) closeConfirm();
 });
 
-// Android 시스템 뒤로가기 버튼 보호.
-// 수정 중에는 화면을 벗어나지 않고 작성 내용을 즉시 임시저장한 뒤
-// 수정 화면을 그대로 유지합니다.
+// Android 시스템 뒤로가기 버튼 처리.
+// 1) 수정 중: 화면을 벗어나지 않고 작성 내용을 임시저장한 뒤 수정 화면 유지
+// 2) 읽기 화면: 메인화면으로 복귀
+// 3) 메인화면: 더 이상 가로채지 않아 다음 뒤로가기에서 앱/웹앱이 종료되도록 둠
 window.addEventListener('popstate', () => {
-  if (!editMode) return;
+  if (editMode) {
+    saveDraftLocally();
 
-  saveDraftLocally();
+    // 다시 보호 상태를 넣어 뒤로가기로 수정 화면을 벗어나지 않게 합니다.
+    try {
+      history.pushState({ processMemoEdit: true, plant: selectedPlant }, '', location.href);
+    } catch (_) {}
 
-  // 다시 보호 상태를 넣어 뒤로가기로 수정 화면을 벗어나지 않게 합니다.
-  try {
-    history.pushState({ processMemoEdit: true }, '', location.href);
-  } catch (_) {}
+    statusEl.textContent = '작성 중인 내용이 보호되고 있습니다.';
+    setTimeout(() => {
+      statusEl.textContent = '수정 중';
+    }, 1200);
+    return;
+  }
 
-  statusEl.textContent = '작성 중인 내용이 보호되고 있습니다.';
-  setTimeout(() => {
-    statusEl.textContent = '수정 중';
-  }, 1200);
+  // 저장/되돌리기 완료 시 수정 보호용 히스토리를 내부적으로 한 단계 제거합니다.
+  // 그때 발생한 popstate는 상세 읽기 화면을 그대로 유지해야 합니다.
+  if (suppressNextDetailPop) {
+    suppressNextDetailPop = false;
+    return;
+  }
+
+  // 사용자가 상세 읽기 화면에서 Android 시스템 뒤로가기를 누른 경우.
+  if (detailView.classList.contains('active')) {
+    showHomeView();
+  }
 });
 
 // 홈 버튼, 최근 앱, 화면 꺼짐 등으로 앱이 백그라운드로 갈 때
@@ -1230,6 +1271,13 @@ document.addEventListener('touchmove', e => {
 window.addEventListener('beforeunload', () => {
   if (editMode) saveDraftLocally();
 });
+
+// 현재 최초 화면을 메인 상태로 표시합니다.
+// 상세 화면에서 뒤로가면 이 상태로 돌아오고, 메인에서 한 번 더 뒤로가면
+// 브라우저/PWA의 기본 동작에 따라 앱을 빠져나가게 됩니다.
+try {
+  history.replaceState({ processMemoHome: true }, '', location.href);
+} catch (_) {}
 
 // 비정상 종료/새로고침 전에 작성하던 메모가 있으면 자동 복원
 restoreLocalDraft();

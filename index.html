@@ -934,14 +934,20 @@ function enterEditMode() {
   noticeEl.style.display = 'none';
   errorEl.style.display = 'none';
 
-  // 기존 메모 맨 아래에 빈 줄 1개 + 현재 날짜/시간 + 다음 입력 줄을 자동 추가
-  const baseText = (currentText || '').replace(/\s+$/, '');
+  // 기존 메모 원문을 그대로 유지한 채 맨 아래에 날짜/시간을 추가합니다.
+  // 이렇게 해야 기존 내용을 건드리지 않은 일반적인 입력은 '추가 저장'으로
+  // 정확히 판별할 수 있어 장기간 사용해도 저장 속도가 느려지지 않습니다.
   const timestamp = makeEditTimestamp();
+  const original = currentText || '';
 
-  if (baseText) {
-    editorEl.value = baseText + '\n\n' + timestamp + '\n';
-  } else {
+  if (!original) {
     editorEl.value = timestamp + '\n';
+  } else if (original.endsWith('\n\n')) {
+    editorEl.value = original + timestamp + '\n';
+  } else if (original.endsWith('\n')) {
+    editorEl.value = original + '\n' + timestamp + '\n';
+  } else {
+    editorEl.value = original + '\n\n' + timestamp + '\n';
   }
 
   editorEl.style.display = 'block';
@@ -1030,40 +1036,64 @@ async function savePlant() {
   rightLabel.textContent = '저장중';
   statusEl.textContent = '저장중...';
 
+  // 기존 원문이 그대로 앞부분에 남아 있으면 사용자가 과거 기록을 수정하지 않고
+  // 맨 아래에 새 내용만 추가한 경우입니다. 이때는 추가된 부분만 서버로 보냅니다.
+  // 과거 내용을 한 글자라도 수정했다면 자동으로 전체 저장 방식으로 전환됩니다.
+  const appendOnly = text.startsWith(currentText);
+  const sendText = appendOnly ? text.slice(currentText.length) : text;
+
   const token = Date.now().toString(36) + Math.random().toString(36).slice(2,10);
-  const CHUNK_SIZE = 600;
+  const CHUNK_SIZE = 600; // JSONP/URL 길이 안전성을 위해 기존의 보수적인 크기 유지
   const chunks = [];
 
-  for (let i=0; i<text.length; i+=CHUNK_SIZE) {
-    chunks.push(text.slice(i, i+CHUNK_SIZE));
+  for (let i=0; i<sendText.length; i+=CHUNK_SIZE) {
+    chunks.push(sendText.slice(i, i+CHUNK_SIZE));
   }
   if (!chunks.length) chunks.push('');
 
   try {
-    let p = await jsonp({ action:'saveStart', plant:selectedPlant, token });
-    if (!p.ok) throw new Error(p.error || '저장을 시작하지 못했습니다.');
+    let p;
 
-    for (let i=0; i<chunks.length; i++) {
+    // 대부분의 일상 메모는 600자 이하이므로 요청 1번으로 바로 추가 저장합니다.
+    if (appendOnly && sendText.length <= CHUNK_SIZE) {
       p = await jsonp({
-        action:'saveChunk',
+        action:'appendQuick',
+        plant:selectedPlant,
+        data:sendText
+      }, 45000);
+      if (!p.ok) throw new Error(p.error || '저장하지 못했습니다.');
+    } else {
+      const startAction = appendOnly ? 'appendStart' : 'saveStart';
+      const chunkAction = appendOnly ? 'appendChunk' : 'saveChunk';
+      const finishAction = appendOnly ? 'appendFinish' : 'saveFinish';
+
+      p = await jsonp({ action:startAction, plant:selectedPlant, token });
+      if (!p.ok) throw new Error(p.error || '저장을 시작하지 못했습니다.');
+
+      for (let i=0; i<chunks.length; i++) {
+        p = await jsonp({
+          action:chunkAction,
+          plant:selectedPlant,
+          token,
+          index:String(i),
+          data:chunks[i]
+        });
+        if (!p.ok) throw new Error(p.error || '저장 중 오류가 발생했습니다.');
+      }
+
+      p = await jsonp({
+        action:finishAction,
         plant:selectedPlant,
         token,
-        index:String(i),
-        data:chunks[i]
-      });
-      if (!p.ok) throw new Error(p.error || '저장 중 오류가 발생했습니다.');
+        count:String(chunks.length)
+      }, 45000);
+
+      if (!p.ok) throw new Error(p.error || '저장하지 못했습니다.');
     }
 
-    p = await jsonp({
-      action:'saveFinish',
-      plant:selectedPlant,
-      token,
-      count:String(chunks.length)
-    }, 45000);
-
-    if (!p.ok) throw new Error(p.error || '저장하지 못했습니다.');
-
-    currentText = text;
+    // 서버가 반환한 실제 최종 텍스트를 우선 사용합니다.
+    // 동시에 다른 사용자가 내용을 추가한 경우에도 화면과 서버 내용을 맞출 수 있습니다.
+    currentText = typeof p.text === 'string' ? p.text : text;
     editMode = false;
     clearLocalDraft();
     releaseEditHistoryGuard();
@@ -1075,7 +1105,7 @@ async function savePlant() {
 
     statusEl.textContent = p.updated ? '저장 완료: ' + p.updated : formatNow('저장 완료');
     headerSavedTime.textContent = p.updated ? formatHeaderSavedTime(p.updated) : '';
-      scrollToBottomSoon();
+    scrollToBottomSoon();
 
   } catch (err) {
     statusEl.textContent = '저장 실패';

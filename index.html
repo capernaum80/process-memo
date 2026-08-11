@@ -25,7 +25,13 @@
     }
 
     * { box-sizing:border-box; }
-    html, body { margin:0; min-height:100%; background:#fff; color:#101729; }
+    html, body {
+      margin:0;
+      min-height:100%;
+      background:#fff;
+      color:#101729;
+      overscroll-behavior-y:none;
+    }
     body {
       font-family:-apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
       -webkit-text-size-adjust:100%;
@@ -191,7 +197,7 @@
     }
 
     .content-box {
-      min-height:calc(100vh - 200px);
+      min-height:calc(100vh - 165px);
       border:1px solid #cfd8e5;
       border-radius:9px;
       background:#fff;
@@ -201,7 +207,7 @@
 
     #notice {
       display:none;
-      min-height:calc(100vh - 202px);
+      min-height:calc(100vh - 167px);
       padding:18px 16px;
       white-space:pre-wrap;
       overflow-wrap:anywhere;
@@ -214,7 +220,7 @@
     #editor {
       display:none;
       width:100%;
-      min-height:calc(100vh - 202px);
+      min-height:calc(100vh - 167px);
       border:0;
       outline:0;
       resize:none;
@@ -226,14 +232,6 @@
       white-space:pre-wrap;
     }
 
-    .bottom-note {
-      padding:12px 3px 4px;
-      color:#627087;
-      font-size:13px;
-      display:flex;
-      align-items:center;
-      gap:7px;
-    }
 
     #error {
       display:none;
@@ -366,9 +364,7 @@
         <textarea id="editor" spellcheck="false" aria-label="처리장 메모 수정"></textarea>
         <div id="error"></div>
       </div>
-
-      <div class="bottom-note"><span>ⓘ</span><span id="bottomText">최신 메모가 하단에 표시됩니다.</span></div>
-    </div>
+</div>
   </section>
 
 </div>
@@ -405,7 +401,6 @@ const leftIcon = document.getElementById('leftIcon');
 const leftLabel = document.getElementById('leftLabel');
 const rightIcon = document.getElementById('rightIcon');
 const rightLabel = document.getElementById('rightLabel');
-const bottomText = document.getElementById('bottomText');
 
 const confirmModal = document.getElementById('confirmModal');
 const modalTitle = document.getElementById('modalTitle');
@@ -417,6 +412,8 @@ let selectedPlant = '';
 let currentText = '';
 let editMode = false;
 let loadingTimer = null;
+
+const DRAFT_STORAGE_KEY = 'processMemoDraftV1';
 let loadingFrame = 0;
 let confirmAction = null;
 const frames = ['불러오는 중', '불러오는 중.', '불러오는 중..', '불러오는 중...'];
@@ -487,6 +484,78 @@ function showError(message) {
   errorEl.textContent = message;
 }
 
+
+function saveDraftLocally() {
+  if (!editMode || !selectedPlant) return;
+
+  const payload = {
+    plant: selectedPlant,
+    originalText: currentText,
+    draftText: editorEl.value,
+    savedAt: Date.now()
+  };
+
+  try {
+    localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(payload));
+  } catch (_) {}
+}
+
+function clearLocalDraft() {
+  try {
+    localStorage.removeItem(DRAFT_STORAGE_KEY);
+  } catch (_) {}
+}
+
+function getLocalDraft() {
+  try {
+    const raw = localStorage.getItem(DRAFT_STORAGE_KEY);
+    if (!raw) return null;
+
+    const data = JSON.parse(raw);
+    if (!data || !data.plant || typeof data.draftText !== 'string') return null;
+
+    return data;
+  } catch (_) {
+    return null;
+  }
+}
+
+function restoreLocalDraft() {
+  const draft = getLocalDraft();
+  if (!draft) return false;
+
+  selectedPlant = draft.plant;
+  currentText = typeof draft.originalText === 'string' ? draft.originalText : '';
+  editMode = true;
+
+  try {
+    history.pushState({ processMemoEdit: true }, '', location.href);
+  } catch (_) {}
+
+  homeView.style.display = 'none';
+  detailView.style.display = 'block';
+  detailTitle.textContent = selectedPlant + ' 처리장';
+
+  setEditModeButtons();
+
+  errorEl.style.display = 'none';
+  noticeEl.style.display = 'none';
+  editorEl.value = draft.draftText;
+  editorEl.style.display = 'block';
+
+  statusEl.textContent = '작성 중이던 내용을 복원했습니다.';
+
+  setTimeout(() => {
+    editorEl.focus();
+    const end = editorEl.value.length;
+    editorEl.setSelectionRange(end, end);
+    editorEl.scrollTop = editorEl.scrollHeight;
+    window.scrollTo(0, document.documentElement.scrollHeight);
+  }, 80);
+
+  return true;
+}
+
 function formatNow(prefix) {
   const d = new Date();
   const mm = String(d.getMonth()+1).padStart(2,'0');
@@ -518,7 +587,6 @@ async function openPlant(plant) {
   errorEl.style.display = 'none';
   noticeEl.style.display = 'none';
   editorEl.style.display = 'none';
-  bottomText.textContent = '최신 메모가 하단에 표시됩니다.';
   startLoading();
 
   try {
@@ -565,26 +633,62 @@ function setEditModeButtons() {
   rightLabel.textContent = '저장';
 }
 
+function makeEditTimestamp() {
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mi = String(d.getMinutes()).padStart(2, '0');
+  return `[${yyyy}.${mm}.${dd} ${hh}:${mi}]`;
+}
+
 function enterEditMode() {
   if (!selectedPlant || editMode) return;
 
   editMode = true;
+
+  // Android 뒤로가기 버튼을 눌렀을 때 수정 화면을 벗어나지 않도록
+  // 현재 수정 상태를 히스토리에 한 단계 추가합니다.
+  try {
+    history.pushState({ processMemoEdit: true }, '', location.href);
+  } catch (_) {}
+
   setEditModeButtons();
   noticeEl.style.display = 'none';
   errorEl.style.display = 'none';
 
-  editorEl.value = currentText;
+  // 기존 메모 맨 아래에 빈 줄 1개 + 현재 날짜/시간 + 다음 입력 줄을 자동 추가
+  const baseText = (currentText || '').replace(/\s+$/, '');
+  const timestamp = makeEditTimestamp();
+
+  if (baseText) {
+    editorEl.value = baseText + '\n\n' + timestamp + '\n';
+  } else {
+    editorEl.value = timestamp + '\n';
+  }
+
   editorEl.style.display = 'block';
+  saveDraftLocally();
 
   statusEl.textContent = '수정 중';
-  bottomText.textContent = '수정 모드에서는 내용을 바로 편집할 수 있습니다.';
-
   setTimeout(() => {
     editorEl.focus();
-    editorEl.setSelectionRange(editorEl.value.length, editorEl.value.length);
+    const end = editorEl.value.length;
+    editorEl.setSelectionRange(end, end);
     editorEl.scrollTop = editorEl.scrollHeight;
     window.scrollTo(0, document.documentElement.scrollHeight);
   }, 50);
+}
+
+
+function releaseEditHistoryGuard() {
+  // pushState로 추가한 보호 히스토리 1단계를 정상 종료 시 정리합니다.
+  try {
+    if (history.state && history.state.processMemoEdit) {
+      history.back();
+    }
+  } catch (_) {}
 }
 
 function askConfirm(title, message, action) {
@@ -612,6 +716,7 @@ function askUndo() {
 function doUndo() {
   editorEl.value = currentText;
   editMode = false;
+  releaseEditHistoryGuard();
   setReadModeButtons();
 
   editorEl.style.display = 'none';
@@ -619,7 +724,6 @@ function doUndo() {
   noticeEl.style.display = 'block';
 
   statusEl.textContent = formatNow('수정 취소');
-  bottomText.textContent = '최신 메모가 하단에 표시됩니다.';
   scrollToBottomSoon();
 }
 
@@ -677,6 +781,8 @@ async function savePlant() {
 
     currentText = text;
     editMode = false;
+    clearLocalDraft();
+    releaseEditHistoryGuard();
     setReadModeButtons();
 
     editorEl.style.display = 'none';
@@ -684,8 +790,7 @@ async function savePlant() {
     noticeEl.style.display = 'block';
 
     statusEl.textContent = p.updated ? '저장 완료: ' + p.updated : formatNow('저장 완료');
-    bottomText.textContent = '최신 메모가 하단에 표시됩니다.';
-    scrollToBottomSoon();
+      scrollToBottomSoon();
 
   } catch (err) {
     statusEl.textContent = '저장 실패';
@@ -700,6 +805,8 @@ async function savePlant() {
 document.querySelectorAll('.plant-btn').forEach(btn => {
   btn.addEventListener('click', () => openPlant(btn.dataset.plant));
 });
+
+editorEl.addEventListener('input', saveDraftLocally);
 
 leftButton.addEventListener('click', () => {
   if (editMode) askUndo();
@@ -723,6 +830,66 @@ modalYes.addEventListener('click', () => {
 confirmModal.addEventListener('click', e => {
   if (e.target === confirmModal) closeConfirm();
 });
+
+// Android 시스템 뒤로가기 버튼 보호.
+// 수정 중에는 화면을 벗어나지 않고 작성 내용을 즉시 임시저장한 뒤
+// 수정 화면을 그대로 유지합니다.
+window.addEventListener('popstate', () => {
+  if (!editMode) return;
+
+  saveDraftLocally();
+
+  // 다시 보호 상태를 넣어 뒤로가기로 수정 화면을 벗어나지 않게 합니다.
+  try {
+    history.pushState({ processMemoEdit: true }, '', location.href);
+  } catch (_) {}
+
+  statusEl.textContent = '작성 중인 내용이 보호되고 있습니다.';
+  setTimeout(() => {
+    statusEl.textContent = '수정 중';
+  }, 1200);
+});
+
+// 홈 버튼, 최근 앱, 화면 꺼짐 등으로 앱이 백그라운드로 갈 때
+// 작성 중인 내용을 한 번 더 저장합니다.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden' && editMode) {
+    saveDraftLocally();
+  }
+});
+
+// 모바일 브라우저가 페이지를 메모리에서 내리기 직전에도 추가 저장
+window.addEventListener('pagehide', () => {
+  if (editMode) saveDraftLocally();
+});
+
+// Android Chrome / 설치형 웹앱에서 화면 최상단을 아래로 당겨
+// 브라우저 새로고침이 발생하는 것을 추가로 방지합니다.
+let touchStartY = 0;
+
+document.addEventListener('touchstart', e => {
+  if (!e.touches || !e.touches.length) return;
+  touchStartY = e.touches[0].clientY;
+}, { passive:true });
+
+document.addEventListener('touchmove', e => {
+  if (!e.touches || !e.touches.length) return;
+
+  const currentY = e.touches[0].clientY;
+  const pullingDown = currentY > touchStartY;
+
+  // textarea 자체 스크롤은 허용하되, 페이지 최상단에서 아래로 당기는 동작만 차단
+  if (pullingDown && window.scrollY <= 0 && e.target !== editorEl) {
+    e.preventDefault();
+  }
+}, { passive:false });
+
+window.addEventListener('beforeunload', () => {
+  if (editMode) saveDraftLocally();
+});
+
+// 비정상 종료/새로고침 전에 작성하던 메모가 있으면 자동 복원
+restoreLocalDraft();
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {

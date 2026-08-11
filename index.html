@@ -568,7 +568,7 @@ let loadingFrame = 0;
 let confirmAction = null;
 const frames = ['불러오는 중', '불러오는 중.', '불러오는 중..', '불러오는 중...'];
 
-function jsonp(params, timeoutMs=30000) {
+function jsonp(params, timeoutMs=12000) {
   return new Promise((resolve, reject) => {
     if (!PROXY_URL || PROXY_URL.indexOf('여기에_') === 0) {
       reject(new Error('Apps Script 웹앱 주소가 아직 입력되지 않았습니다.'));
@@ -958,7 +958,7 @@ async function savePlant() {
       plant:selectedPlant,
       token,
       count:String(chunks.length)
-    }, 45000);
+    }, 20000);
 
     if (!p.ok) throw new Error(p.error || '저장하지 못했습니다.');
 

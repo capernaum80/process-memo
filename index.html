@@ -136,23 +136,49 @@
     }
 
     .topbar {
-      height:68px;
+      height:180px;
+      flex:0 0 180px;
       background:linear-gradient(#0b64d6,#0759c6);
       color:#fff;
       display:grid;
-      grid-template-columns:1fr auto auto;
+      grid-template-columns:1fr auto;
+      grid-template-rows:1fr;
       align-items:center;
-      gap:10px;
-      padding:0 14px;
+      gap:12px;
+      padding:18px 18px;
       box-shadow:0 2px 7px rgba(0,0,0,.12);
-      flex:0 0 68px;
       z-index:10;
     }
 
+    .plant-head {
+      min-width:0;
+      display:flex;
+      flex-direction:column;
+      justify-content:center;
+      gap:8px;
+    }
+
     .team-name {
-      font-size:21px;
-      font-weight:800;
+      font-size:27px;
+      font-weight:850;
+      line-height:1.1;
       white-space:nowrap;
+      letter-spacing:-0.03em;
+    }
+
+    .saved-in-header {
+      font-size:14px;
+      font-weight:600;
+      line-height:1.2;
+      color:rgba(255,255,255,.88);
+      white-space:nowrap;
+    }
+
+    .top-actions {
+      display:flex;
+      align-items:center;
+      gap:10px;
+      flex-shrink:0;
     }
 
     .top-btn {
@@ -177,7 +203,7 @@
     .top-btn[disabled] { opacity:.55; }
 
     .detail-body {
-      height:calc(100dvh - 68px);
+      height:calc(100dvh - 180px);
       padding:8px 14px 10px;
       max-width:760px;
       width:100%;
@@ -188,22 +214,11 @@
     }
 
     .detail-title {
-      flex:0 0 auto;
-      text-align:center;
-      color:var(--navy);
-      font-size:29px;
-      font-weight:850;
-      line-height:1.15;
-      margin:2px 0 4px;
+      display:none;
     }
 
     #status {
-      flex:0 0 auto;
-      min-height:24px;
-      padding:0 2px 4px;
-      color:#55637a;
-      font-size:13px;
-      line-height:20px;
+      display:none;
     }
 
     .content-box {
@@ -392,6 +407,59 @@
       }
     }
 
+  
+    /* 최종 상세화면 헤더 높이 고정 */
+    @media (max-width:430px) {
+      .topbar {
+        height:180px !important;
+        flex-basis:180px !important;
+        padding:18px 14px !important;
+        grid-template-columns:1fr auto !important;
+        gap:10px !important;
+      }
+
+      .detail-body {
+        height:calc(100dvh - 180px) !important;
+        padding:8px 12px 8px !important;
+      }
+
+      .team-name {
+        font-size:25px !important;
+      }
+
+      .saved-in-header {
+        font-size:13px !important;
+      }
+
+      .top-actions {
+        gap:7px;
+      }
+
+      .top-btn {
+        min-width:102px !important;
+        height:42px !important;
+        padding:0 9px !important;
+        font-size:16px !important;
+      }
+    }
+
+    @media (max-width:370px) {
+      .topbar {
+        padding-left:10px !important;
+        padding-right:10px !important;
+      }
+      .team-name {
+        font-size:22px !important;
+      }
+      .saved-in-header {
+        font-size:12px !important;
+      }
+      .top-btn {
+        min-width:90px !important;
+        font-size:14px !important;
+      }
+    }
+
   </style>
 </head>
 
@@ -416,9 +484,15 @@
 
   <section id="detailView">
     <div class="topbar">
-      <div class="team-name">공정팀</div>
-      <button id="leftButton" class="top-btn" type="button"><span id="leftIcon">←</span><span id="leftLabel">이전화면</span></button>
-      <button id="rightButton" class="top-btn" type="button"><span id="rightIcon">✎</span><span id="rightLabel">수정</span></button>
+      <div class="plant-head">
+        <div id="headerPlantName" class="team-name">처리장</div>
+        <div id="headerSavedTime" class="saved-in-header"></div>
+      </div>
+
+      <div class="top-actions">
+        <button id="leftButton" class="top-btn" type="button"><span id="leftIcon">←</span><span id="leftLabel">이전화면</span></button>
+        <button id="rightButton" class="top-btn" type="button"><span id="rightIcon">✎</span><span id="rightLabel">수정</span></button>
+      </div>
     </div>
 
     <div class="detail-body">
@@ -458,6 +532,8 @@ const homeView = document.getElementById('homeView');
 const detailView = document.getElementById('detailView');
 const detailTitle = document.getElementById('detailTitle');
 const statusEl = document.getElementById('status');
+const headerPlantName = document.getElementById('headerPlantName');
+const headerSavedTime = document.getElementById('headerSavedTime');
 const noticeEl = document.getElementById('notice');
 const editorEl = document.getElementById('editor');
 const errorEl = document.getElementById('error');
@@ -601,6 +677,7 @@ function restoreLocalDraft() {
   homeView.style.display = 'none';
   detailView.classList.add('active');
   detailTitle.textContent = selectedPlant + ' 처리장';
+  headerPlantName.textContent = selectedPlant + '처리장';
 
   setEditModeButtons();
 
@@ -619,6 +696,19 @@ function restoreLocalDraft() {
   }, 80);
 
   return true;
+}
+
+
+function formatHeaderSavedTime(value) {
+  const s = String(value || '').trim();
+
+  // Apps Script 형식: yyyy-MM-dd HH:mm
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})$/);
+  if (m) {
+    return `${m[1].slice(2)}.${m[2]}.${m[3]} ${m[4]}:${m[5]}`;
+  }
+
+  return s;
 }
 
 function formatNow(prefix) {
@@ -643,6 +733,9 @@ async function openPlant(plant) {
   currentText = '';
   editMode = false;
 
+  headerPlantName.textContent = plant + '처리장';
+  headerSavedTime.textContent = '';
+
   homeView.style.display = 'none';
   detailView.classList.add('active');
 
@@ -660,6 +753,7 @@ async function openPlant(plant) {
     stopLoading();
     currentText = payload.text || '';
     statusEl.textContent = payload.updated ? '최종 저장: ' + payload.updated : formatNow('최종 확인');
+    headerSavedTime.textContent = payload.updated ? formatHeaderSavedTime(payload.updated) : '';
 
     noticeEl.textContent = currentText.trim() ? currentText : '메모가 비어 있습니다.';
     noticeEl.style.display = 'block';
@@ -676,6 +770,8 @@ function backHome() {
   if (editMode) return;
   selectedPlant = '';
   currentText = '';
+  headerPlantName.textContent = '처리장';
+  headerSavedTime.textContent = '';
   detailView.classList.remove('active');
   homeView.style.display = 'block';
   window.scrollTo(0,0);
@@ -853,6 +949,7 @@ async function savePlant() {
     noticeEl.style.display = 'block';
 
     statusEl.textContent = p.updated ? '저장 완료: ' + p.updated : formatNow('저장 완료');
+    headerSavedTime.textContent = p.updated ? formatHeaderSavedTime(p.updated) : '';
       scrollToBottomSoon();
 
   } catch (err) {

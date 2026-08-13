@@ -751,7 +751,8 @@ function restoreLocalDraft() {
   editorEl.value = draft.draftText;
   editorEl.style.display = 'block';
 
-  statusEl.textContent = '작성 중이던 내용을 복원했습니다.';\n  headerSavedTime.textContent = '임시 저장 내용 복원';
+  statusEl.textContent = '작성 중이던 내용을 복원했습니다.';
+  headerSavedTime.textContent = '임시 저장 내용 복원';
 
   setTimeout(() => {
     editorEl.focus();

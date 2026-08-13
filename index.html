@@ -655,14 +655,20 @@ function jsonp(params, timeoutMs=30000) {
   });
 }
 
-function startLoading() {
+function startLoading(label='불러오는 중') {
   stopLoading();
   loadingFrame = 0;
-  statusEl.textContent = frames[0];
 
-  loadingTimer = setInterval(() => {
-    statusEl.textContent = frames[loadingFrame++ % frames.length];
-  }, 180);
+  const draw = () => {
+    const dots = '.'.repeat(loadingFrame % 4);
+    const message = label + dots;
+    statusEl.textContent = message;
+    headerSavedTime.textContent = message;
+    loadingFrame++;
+  };
+
+  draw();
+  loadingTimer = setInterval(draw, 320);
 }
 
 function stopLoading() {
@@ -745,7 +751,7 @@ function restoreLocalDraft() {
   editorEl.value = draft.draftText;
   editorEl.style.display = 'block';
 
-  statusEl.textContent = '작성 중이던 내용을 복원했습니다.';
+  statusEl.textContent = '작성 중이던 내용을 복원했습니다.';\n  headerSavedTime.textContent = '임시 저장 내용 복원';
 
   setTimeout(() => {
     editorEl.focus();
@@ -822,20 +828,24 @@ async function openPlant(plant) {
   headerPlantName.textContent = plant + '처리장';
   headerSavedTime.textContent = '';
 
-  rightIcon.textContent = '';
-  rightLabel.textContent = '로딩중';
-  rightButton.disabled = true;
-
   homeView.style.display = 'none';
   detailView.classList.add('active');
   document.body.classList.add('detail-open');
 
   detailTitle.textContent = plant + ' 처리장';
   setReadModeButtons();
+
+  rightIcon.textContent = '';
+  rightLabel.textContent = '불러오는중';
+  rightButton.disabled = true;
+
   errorEl.style.display = 'none';
   noticeEl.style.display = 'none';
   editorEl.style.display = 'none';
-  startLoading();
+
+  // 메모가 길거나 통신이 느려도 멈춘 것처럼 보이지 않도록
+  // 파란 헤더의 처리장명 바로 아래에서 진행 상태를 계속 보여줍니다.
+  startLoading('불러오는 중');
 
   try {
     const payload = await jsonp({ action:'read', plant });
@@ -858,10 +868,12 @@ async function openPlant(plant) {
 
     scrollToBottomSoon();
   } catch (err) {
+    stopLoading();
     loadingPlant = false;
     rightIcon.textContent = '';
-    rightLabel.textContent = '로딩중';
+    rightLabel.textContent = '다시열기';
     rightButton.disabled = true;
+    headerSavedTime.textContent = '불러오기 실패';
 
     showError(err && err.message ? err.message : '내용을 불러오지 못했습니다.');
   }
@@ -919,6 +931,11 @@ function makeEditTimestamp() {
   return `[${yyyy}.${mm}.${dd} ${hh}:${mi}]`;
 }
 
+function getLastEditTimestamp(text) {
+  const matches = String(text || '').match(/\[\d{4}\.\d{2}\.\d{2}\s+\d{2}:\d{2}\]/g);
+  return matches && matches.length ? matches[matches.length - 1] : '';
+}
+
 function enterEditMode() {
   if (!selectedPlant || editMode) return;
 
@@ -934,13 +951,16 @@ function enterEditMode() {
   noticeEl.style.display = 'none';
   errorEl.style.display = 'none';
 
-  // 기존 메모 원문을 그대로 유지한 채 맨 아래에 날짜/시간을 추가합니다.
-  // 이렇게 해야 기존 내용을 건드리지 않은 일반적인 입력은 '추가 저장'으로
-  // 정확히 판별할 수 있어 장기간 사용해도 저장 속도가 느려지지 않습니다.
+  // 기존 메모 원문은 그대로 유지하면서 맨 아래에 날짜/시간을 붙입니다.
+  // 단, 방금 저장한 뒤 같은 '분' 안에 다시 수정으로 들어온 경우에는
+  // 동일한 [년.월.일 시:분] 타임스탬프를 한 번 더 만들지 않습니다.
   const timestamp = makeEditTimestamp();
   const original = currentText || '';
+  const lastTimestamp = getLastEditTimestamp(original);
 
-  if (!original) {
+  if (lastTimestamp === timestamp) {
+    editorEl.value = original;
+  } else if (!original) {
     editorEl.value = timestamp + '\n';
   } else if (original.endsWith('\n\n')) {
     editorEl.value = original + timestamp + '\n';
@@ -1034,7 +1054,9 @@ async function savePlant() {
   leftButton.disabled = true;
   rightButton.disabled = true;
   rightLabel.textContent = '저장중';
-  statusEl.textContent = '저장중...';
+
+  // 저장 중에도 처리장명 아래에 점이 움직이는 진행 표시를 보여줍니다.
+  startLoading('저장 중');
 
   // 기존 원문이 그대로 앞부분에 남아 있으면 사용자가 과거 기록을 수정하지 않고
   // 맨 아래에 새 내용만 추가한 경우입니다. 이때는 추가된 부분만 서버로 보냅니다.
@@ -1103,12 +1125,15 @@ async function savePlant() {
     noticeEl.textContent = currentText.trim() ? currentText : '메모가 비어 있습니다.';
     noticeEl.style.display = 'block';
 
+    stopLoading();
     statusEl.textContent = p.updated ? '저장 완료: ' + p.updated : formatNow('저장 완료');
-    headerSavedTime.textContent = p.updated ? formatHeaderSavedTime(p.updated) : '';
+    headerSavedTime.textContent = p.updated ? formatHeaderSavedTime(p.updated) : '저장 완료';
     scrollToBottomSoon();
 
   } catch (err) {
+    stopLoading();
     statusEl.textContent = '저장 실패';
+    headerSavedTime.textContent = '저장 실패';
     alert('저장하지 못했습니다.\n' + (err && err.message ? err.message : '잠시 후 다시 시도해주세요.'));
     setEditModeButtons();
   } finally {
@@ -1314,7 +1339,7 @@ restoreLocalDraft();
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js?v=7', { updateViaCache: 'none' }).catch(() => {});
+    navigator.serviceWorker.register('./sw.js?v=8', { updateViaCache: 'none' }).catch(() => {});
   });
 }
 </script>
